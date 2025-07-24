@@ -288,7 +288,6 @@ export class TableUp {
   constructor(quill: Quill, options: Partial<TableUpOptions>) {
     this.quill = quill;
     this.options = this.resolveOptions(options || {});
-    console.log(this.options)
     this.toolBox = this.initialContainer();
 
     if (!this.options.scrollbar) {
