@@ -288,6 +288,7 @@ export class TableUp {
   constructor(quill: Quill, options: Partial<TableUpOptions>) {
     this.quill = quill;
     this.options = this.resolveOptions(options || {});
+    console.log(this.options)
     this.toolBox = this.initialContainer();
 
     if (!this.options.scrollbar) {
@@ -649,13 +650,33 @@ export class TableUp {
       if (this.options.scrollbar) {
         this.tableScrollbar = new this.options.scrollbar(this, table, this.quill, this.options.scrollbarOptions);
       }
-      if (this.options.resize) {
+      if (this.options.resize ) {
+        this.isClickCellFocus = true // 点击表格 
+        if( this.tableResize)return // 鼠标hover 已经存在的
         this.tableResize = new this.options.resize(this, table, this.quill, this.options.resizeOptions);
       }
       if (this.options.resizeScale) {
         this.tableResizeScale = new this.options.resizeScale(this, table, this.quill, this.options.resizeScaleOptions);
       }
     }
+  }
+  showResizeTools(table: HTMLElement) {
+    // 20250724 新增 显示 tableResize tool
+    if (table && !this.tableResize) {
+      if (this.options.resize) {
+        this.tableResize = new this.options.resize(this, table, this.quill, this.options.resizeOptions);
+      }
+    }
+  }
+  hideResizeTools() {
+    // 20250724 新增 隐藏 tableResize tool
+    if(this.isClickCellFocus)return
+    if (this.tableResize) {
+      this.tableResize.destroy();
+      console.log(123123)
+      this.tableResize = undefined;
+    }
+    this.table = undefined;
   }
 
   hideTableTools() {
@@ -669,6 +690,7 @@ export class TableUp {
       this.tableAlign = undefined;
     }
     if (this.tableResize) {
+      this.isClickCellFocus = false
       this.tableResize.destroy();
       this.tableResize = undefined;
     }

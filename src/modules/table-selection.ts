@@ -422,7 +422,8 @@ export class TableSelection {
         this.tableMenu.hide();
       }
       if (this.tableModule.tableResize) {
-        this.tableModule.tableResize.hide();
+        // this.tableModule.tableResize.hide();
+        // 20250724 修改 选中单元格不隐藏tableResize tool
       }
       const { button, target, clientX, clientY } = mousemoveEvent;
       const closestTable = (target as HTMLElement).closest<HTMLTableElement>('.ql-table');
