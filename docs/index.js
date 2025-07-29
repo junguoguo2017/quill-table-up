@@ -146,7 +146,7 @@ const quillOptions = [
   {
     // debug: 'info',
     theme: 'snow',
-    readOnly: true,
+    readOnly: false,
     modules: {
       toolbar: toolbarConfig,
       [TableUp.moduleName]: {
@@ -186,6 +186,17 @@ const quillOptions = [
   },
 ];
 
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
 const quill = [];
 window.quills = quill;
 for (const [i, options] of quillOptions.entries()) {
@@ -193,6 +204,24 @@ for (const [i, options] of quillOptions.entries()) {
   const quillItem = new Quill(`#editor${index}`, options);
   const btn = document.getElementById(`btn${index}`);
   const output = document.getElementById(`output${index}`);
+   const quillContainer = quillItem.root.closest('.ql-container');
+   quillContainer.addEventListener(
+            'mousemove',
+            debounce(function (mousedownEvent) {
+                const { button, target, clientX, clientY } = mousedownEvent;
+                const Table = target.closest('.ql-table-wrapper');
+                const tableup = quillItem.getModule('table-up');
+              const resizeBox = target.closest('.table-up-resize-box');
+              console.log(resizeBox)
+                if (resizeBox) return;
+                if (Table) {
+                    const closestTable = Table.querySelector('.ql-table');
+                    tableup.showResizeTools(closestTable);
+                } else {
+                    tableup.hideResizeTools();
+                }
+            }, 100),
+        );
   btn.addEventListener('click', () => {
     const content = quillItem.getContents();
     console.log(content);

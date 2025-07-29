@@ -102,6 +102,7 @@ export class TableResizeBox extends TableResizeCommon {
       tableSelection.table = this.table;
       tableSelection.selectedTds = tableSelection.computeSelectedTds(...currentBoundary);
       tableSelection.show();
+      tableSelection.tableMenu.show() // 20250729 新增 显示 tableMenu 
     }
   }
 

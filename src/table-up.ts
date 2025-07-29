@@ -650,7 +650,6 @@ export class TableUp {
         this.tableScrollbar = new this.options.scrollbar(this, table, this.quill, this.options.scrollbarOptions);
       }
       if (this.options.resize ) {
-        this.isClickCellFocus = true // 点击表格 
         if( this.tableResize)return // 鼠标hover 已经存在的
         this.tableResize = new this.options.resize(this, table, this.quill, this.options.resizeOptions);
       }
@@ -669,10 +668,9 @@ export class TableUp {
   }
   hideResizeTools() {
     // 20250724 新增 隐藏 tableResize tool
-    if(this.isClickCellFocus)return
+    if(this.tableSelection.selectedTds.length)return // 有选择的cell
     if (this.tableResize) {
       this.tableResize.destroy();
-      console.log(123123)
       this.tableResize = undefined;
     }
     this.table = undefined;
@@ -689,7 +687,6 @@ export class TableUp {
       this.tableAlign = undefined;
     }
     if (this.tableResize) {
-      this.isClickCellFocus = false
       this.tableResize.destroy();
       this.tableResize = undefined;
     }
