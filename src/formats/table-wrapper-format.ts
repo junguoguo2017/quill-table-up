@@ -11,11 +11,17 @@ export class TableWrapperFormat extends ContainerFormat {
   static blotName = blotName.tableWrapper;
   static tagName = 'div';
   static className = 'ql-table-wrapper';
+  static allowDataAttrs = new Set(['table-id', 'extends']);
 
-  static create(value: string) {
+  static create(value: string | { tableId: string; extends?: string }) {
     const node = super.create() as HTMLElement;
+    const tableId = typeof value === 'string' ? value : value.tableId;
+    const extendsValue = typeof value === 'object' ? value.extends : undefined;
 
-    node.dataset.tableId = value;
+    node.dataset.tableId = tableId;
+    if (extendsValue) {
+      node.dataset.extends = extendsValue;
+    }
     node.addEventListener(
       'dragstart',
       (e) => {
@@ -44,6 +50,58 @@ export class TableWrapperFormat extends ContainerFormat {
 
   get tableId() {
     return this.domNode.dataset.tableId!;
+  }
+
+  get extendsAttr() {
+    return this.domNode.dataset.extends;
+  }
+
+  set extendsAttr(value: string | object | undefined | null) {
+    if (value === undefined || value === null || value === '') {
+      this.domNode.removeAttribute('data-extends');
+    }
+    else {
+      let stringValue: string;
+      if (typeof value === 'object') {
+        try {
+          stringValue = JSON.stringify(value);
+        }
+        catch {
+          stringValue = String(value);
+        }
+      }
+      else {
+        stringValue = String(value);
+      }
+      this.domNode.dataset.extends = stringValue;
+    }
+  }
+
+  setFormatValue(name: string, value?: unknown) {
+    if (this.statics.allowDataAttrs.has(name)) {
+      const attrName = `data-${name}`;
+      if (value === undefined || value === null || value === false || value === '') {
+        this.domNode.removeAttribute(attrName);
+      }
+      else {
+        let stringValue: string;
+        if (typeof value === 'object') {
+          try {
+            stringValue = JSON.stringify(value);
+          }
+          catch {
+            stringValue = String(value);
+          }
+        }
+        else {
+          stringValue = String(value);
+        }
+        this.domNode.setAttribute(attrName, stringValue);
+      }
+      if (name === 'extends') {
+        this.extendsAttr = value as string | object | undefined | null;
+      }
+    }
   }
 
   checkMerge(): boolean {

@@ -729,6 +729,228 @@ export class TableUp {
     }
   }
 
+  getActiveTableMain(): TableMainFormat | null {
+    if (this.tableSelection?.table) {
+      try {
+        const blot = Quill.find(this.tableSelection.table);
+        if (blot instanceof TableMainFormat) {
+          return blot;
+        }
+        return findParentBlot(blot, blotName.tableMain);
+      }
+      catch {}
+    }
+
+    const range = this.quill.getSelection(true);
+    if (!range) return null;
+    const [line] = this.quill.getLine(range.index);
+    if (line) {
+      try {
+        return findParentBlot(line, blotName.tableMain);
+      }
+      catch {}
+    }
+    const [leaf] = this.quill.getLeaf(range.index);
+    if (leaf) {
+      try {
+        return findParentBlot(leaf, blotName.tableMain);
+      }
+      catch {}
+    }
+    return null;
+  }
+
+  resolveTableMain(table?: TableMainFormat | HTMLElement | null): TableMainFormat | null {
+    if (!table) {
+      return this.getActiveTableMain();
+    }
+    if (table instanceof TableMainFormat) {
+      return table;
+    }
+    try {
+      const blot = Quill.find(table);
+      if (blot instanceof TableMainFormat) {
+        return blot;
+      }
+      return findParentBlot(blot, blotName.tableMain);
+    }
+    catch {
+      return null;
+    }
+  }
+
+  getCurrentExtendsKeys(tableMain: TableMainFormat): Set<string> {
+    // 从第一个 col 中获取当前的 extends 对象的所有键
+    const keys = new Set<string>();
+    try {
+      const cols = tableMain.getCols();
+      if (cols.length > 0) {
+        const firstCol = cols[0];
+        const colValue = TableColFormat.value(firstCol.domNode);
+        if (colValue.extends && typeof colValue.extends === 'object') {
+          for (const key of Object.keys(colValue.extends)) {
+            keys.add(key);
+          }
+        }
+      }
+    }
+    catch {
+      // 忽略错误
+    }
+    return keys;
+  }
+
+  setTableExtends(value: Record<string, any> | null, table?: TableMainFormat | HTMLElement | null) {
+    const tableMain = this.resolveTableMain(table);
+    if (!tableMain) return;
+
+    // 校验必须是对象（null 除外）
+    let extendsObj: Record<string, any> | null = null;
+    if (value !== null && value !== undefined) {
+      if (typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('extends value must be an object');
+      }
+      extendsObj = value as Record<string, any>;
+    }
+
+    // 获取当前所有的 extends 键
+    const currentKeys = this.getCurrentExtendsKeys(tableMain);
+    const newKeys = extendsObj ? new Set(Object.keys(extendsObj)) : new Set<string>();
+
+    // 更新 table 的所有 extends 属性
+    if (extendsObj !== null) {
+      // 设置新对象的每个键值对作为 data-xxx
+      for (const [key, val] of Object.entries(extendsObj)) {
+        const attrName = `data-${key}`;
+        if (val === undefined || val === null || val === '') {
+          tableMain.domNode.removeAttribute(attrName);
+        }
+        else {
+          const stringValue = typeof val === 'object' ? JSON.stringify(val) : String(val);
+          tableMain.domNode.setAttribute(attrName, stringValue);
+        }
+      }
+    }
+
+    // 删除新对象中不存在的旧属性
+    for (const oldKey of currentKeys) {
+      if (!newKeys.has(oldKey)) {
+        tableMain.domNode.removeAttribute(`data-${oldKey}`);
+      }
+    }
+
+    // 同时更新 wrapper 的所有 extends 属性
+    try {
+      const tableWrapper = findParentBlot(tableMain, blotName.tableWrapper) as TableWrapperFormat;
+      if (tableWrapper) {
+        if (extendsObj !== null) {
+          // 设置新对象的每个键值对作为 data-xxx
+          for (const [key, val] of Object.entries(extendsObj)) {
+            const attrName = `data-${key}`;
+            if (val === undefined || val === null || val === '') {
+              tableWrapper.domNode.removeAttribute(attrName);
+            }
+            else {
+              const stringValue = typeof val === 'object' ? JSON.stringify(val) : String(val);
+              tableWrapper.domNode.setAttribute(attrName, stringValue);
+            }
+          }
+        }
+        // 删除新对象中不存在的旧属性
+        for (const oldKey of currentKeys) {
+          if (!newKeys.has(oldKey)) {
+            tableWrapper.domNode.removeAttribute(`data-${oldKey}`);
+          }
+        }
+      }
+    }
+    catch {
+      // wrapper 不存在时忽略
+    }
+
+    // 将 extends 对象存储到所有 table-col 中（这样会存储到 delta）
+    if (extendsObj !== null) {
+      try {
+        const cols = tableMain.getCols();
+        const delta = new Delta();
+        let lastIndex = 0;
+        
+        for (const col of cols) {
+          // 更新 col 的 DOM 属性
+          for (const [key, val] of Object.entries(extendsObj)) {
+            const attrName = `data-${key}`;
+            if (val === undefined || val === null || val === '') {
+              col.domNode.removeAttribute(attrName);
+            }
+            else {
+              const stringValue = typeof val === 'object' ? JSON.stringify(val) : String(val);
+              col.domNode.setAttribute(attrName, stringValue);
+            }
+          }
+          // 删除新对象中不存在的旧属性
+          for (const oldKey of currentKeys) {
+            if (!newKeys.has(oldKey)) {
+              col.domNode.removeAttribute(`data-${oldKey}`);
+            }
+          }
+          
+          // 获取当前 col 的值并更新 extends
+          const currentValue = TableColFormat.value(col.domNode);
+          currentValue.extends = extendsObj;
+          
+          // 构建 delta 来更新 col 的值
+          const colIndex = col.offset(this.quill.scroll);
+          delta.retain(colIndex - lastIndex);
+          delta.retain(1, { [blotName.tableCol]: currentValue });
+          lastIndex = colIndex + 1;
+        }
+        
+        // 应用 delta 更新，这样会写入到 delta 中
+        if (delta.length() > 0) {
+          this.quill.updateContents(delta, Quill.sources.USER);
+        }
+      }
+      catch {
+        // col 不存在时忽略
+      }
+    }
+    else {
+      // 如果传入 null，清除所有 extends 属性
+      try {
+        const cols = tableMain.getCols();
+        const delta = new Delta();
+        let lastIndex = 0;
+        
+        for (const col of cols) {
+          // 删除所有 extends 属性
+          for (const oldKey of currentKeys) {
+            col.domNode.removeAttribute(`data-${oldKey}`);
+          }
+          
+          // 获取当前 col 的值并清除 extends
+          const currentValue = TableColFormat.value(col.domNode);
+          delete currentValue.extends;
+          
+          // 构建 delta 来更新 col 的值
+          const colIndex = col.offset(this.quill.scroll);
+          delta.retain(colIndex - lastIndex);
+          delta.retain(1, { [blotName.tableCol]: currentValue });
+          lastIndex = colIndex + 1;
+        }
+        
+        // 应用 delta 更新
+        if (delta.length() > 0) {
+          this.quill.updateContents(delta, Quill.sources.USER);
+        }
+      }
+      catch {
+        // col 不存在时忽略
+      }
+    }
+
+    this.quill.update(Quill.sources.USER);
+  }
+
   getTextByCell(tds: TableCellInnerFormat[]) {
     let text = '';
     for (const td of tds) {

@@ -79,6 +79,7 @@ export interface TableColValue {
   width: number;
   full?: boolean;
   align?: string;
+  extends?: Record<string, any>;
 }
 export interface TableCellValue {
   tableId: string;
@@ -101,6 +102,7 @@ export interface TableValue {
   tableId: string;
   full?: boolean;
   align?: string;
+  'extends'?: string | boolean;
 }
 
 export interface RelactiveRect {

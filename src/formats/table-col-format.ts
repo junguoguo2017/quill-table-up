@@ -20,7 +20,7 @@ export class TableColFormat extends BlockEmbed {
   }
 
   static create(value: TableColValue) {
-    const { width, tableId, colId, full, align } = value;
+    const { width, tableId, colId, full, align, extends: extendsValue } = value;
     const node = super.create() as HTMLElement;
     node.setAttribute('width', this.validWidth(width, !!full));
     full && (node.dataset.full = String(full));
@@ -29,6 +29,16 @@ export class TableColFormat extends BlockEmbed {
     }
     node.dataset.tableId = tableId;
     node.dataset.colId = colId;
+    // 将 extends 对象的每个键值对作为 data-xxx 存储
+    if (extendsValue && typeof extendsValue === 'object') {
+      for (const [key, val] of Object.entries(extendsValue)) {
+        if (val !== undefined && val !== null && val !== '') {
+          const attrName = `data-${key}`;
+          const stringValue = typeof val === 'object' ? JSON.stringify(val) : String(val);
+          node.setAttribute(attrName, stringValue);
+        }
+      }
+    }
     return node;
   }
 
@@ -44,6 +54,42 @@ export class TableColFormat extends BlockEmbed {
       width: Number.parseFloat(width),
     };
     align && (value.align = align);
+    
+    // 收集所有 data-xxx 属性（排除系统属性）作为 extends 对象
+    const systemAttrs = new Set(['tableId', 'colId', 'full', 'align']);
+    const extendsObj: Record<string, any> = {};
+    for (const key in domNode.dataset) {
+      if (!systemAttrs.has(key)) {
+        const attrValue = domNode.dataset[key];
+        if (attrValue) {
+          // 尝试解析 JSON，如果失败则作为字符串
+          try {
+            extendsObj[key] = JSON.parse(attrValue);
+          }
+          catch {
+            extendsObj[key] = attrValue;
+          }
+        }
+      }
+    }
+    // 同时检查直接的 data-xxx 属性（dataset 可能不包含所有属性）
+    for (let i = 0; i < domNode.attributes.length; i++) {
+      const attr = domNode.attributes[i];
+      if (attr.name.startsWith('data-') && attr.name !== 'data-table-id' && attr.name !== 'data-col-id' && attr.name !== 'data-full' && attr.name !== 'data-align') {
+        const key = attr.name.replace('data-', '');
+        if (!systemAttrs.has(key) && !extendsObj[key]) {
+          try {
+            extendsObj[key] = JSON.parse(attr.value);
+          }
+          catch {
+            extendsObj[key] = attr.value;
+          }
+        }
+      }
+    }
+    if (Object.keys(extendsObj).length > 0) {
+      value.extends = extendsObj;
+    }
     return value;
   }
 
@@ -138,6 +184,25 @@ export class TableColFormat extends BlockEmbed {
         isAllFull &&= col.full;
       });
       tableColgroup.full = isAllFull;
+      
+      // 延迟同步 extends 属性到 table 和 wrapper，避免在 optimize 过程中触发循环
+      try {
+        const tableMain = findParentBlot(this, blotName.tableMain);
+        if (tableMain && typeof (tableMain as any).syncExtendsFromCols === 'function') {
+          // 使用 setTimeout 延迟执行，避免在 optimize 过程中触发
+          setTimeout(() => {
+            try {
+              (tableMain as any).syncExtendsFromCols();
+            }
+            catch {
+              // 忽略错误
+            }
+          }, 0);
+        }
+      }
+      catch {
+        // tableMain 不存在时忽略
+      }
     }
     catch {}
   }

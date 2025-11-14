@@ -10,10 +10,16 @@ export class TableMainFormat extends ContainerFormat {
   static blotName = blotName.tableMain;
   static tagName = 'table';
   static className = 'ql-table';
+  static allowDataAttrs = new Set(['table-id', 'full', 'align', 'extends']);
+  static allowDataAttrsChangeHandler: Record<string, keyof TableMainFormat> = {
+    align: 'updateAlign',
+    full: 'colWidthFillTable',
+    extends: 'handleExtendsAttrChange',
+  };
 
   static create(value: TableValue) {
     const node = super.create() as HTMLElement;
-    const { tableId, full, align } = value;
+    const { tableId, full, align, extends: extendsValue } = value;
     node.dataset.tableId = tableId;
     if (align === 'right' || align === 'center') {
       node.dataset.align = align;
@@ -22,14 +28,117 @@ export class TableMainFormat extends ContainerFormat {
       node.removeAttribute('date-align');
     }
     full && (node.dataset.full = String(full));
+    if (extendsValue !== undefined && extendsValue !== null && extendsValue !== false) {
+      let stringValue: string;
+      if (typeof extendsValue === 'object') {
+        try {
+          stringValue = JSON.stringify(extendsValue);
+        }
+        catch {
+          stringValue = String(extendsValue);
+        }
+      }
+      else if (typeof extendsValue === 'string') {
+        stringValue = extendsValue.trim();
+      }
+      else {
+        stringValue = String(extendsValue);
+      }
+      if (stringValue) {
+        node.dataset.extends = stringValue;
+      }
+    }
     node.setAttribute('cellpadding', '0');
     node.setAttribute('cellspacing', '0');
     return node;
   }
 
+  static formats(domNode: HTMLElement): TableValue {
+    const { tableId } = domNode.dataset;
+    const value: TableValue = {
+      tableId: String(tableId),
+    };
+    if (Object.hasOwn(domNode.dataset, 'full')) {
+      value.full = true;
+    }
+    const align = domNode.dataset.align;
+    if (align === 'right' || align === 'center') {
+      value.align = align;
+    }
+    const extendsValue = domNode.dataset.extends;
+    if (extendsValue) {
+      value.extends = extendsValue;
+    }
+    return value;
+  }
+
   constructor(public scroll: TypeScroll, domNode: HTMLElement, _value: unknown) {
     super(scroll, domNode);
     this.updateAlign();
+  }
+
+  get extendsAttr() {
+    return this.domNode.dataset.extends;
+  }
+
+  set extendsAttr(value: string | boolean | object | undefined | null) {
+    if (value === undefined || value === null || value === false) {
+      this.domNode.removeAttribute('data-extends');
+      return;
+    }
+    let stringValue: string;
+    if (typeof value === 'object') {
+      try {
+        stringValue = JSON.stringify(value);
+      }
+      catch {
+        stringValue = String(value);
+      }
+    }
+    else if (typeof value === 'string') {
+      stringValue = value.trim();
+    }
+    else {
+      stringValue = String(value);
+    }
+    if (stringValue) {
+      this.domNode.dataset.extends = stringValue;
+    }
+    else {
+      this.domNode.removeAttribute('data-extends');
+    }
+  }
+
+  handleExtendsAttrChange(value: unknown) {
+    this.extendsAttr = value as string | boolean | object | undefined | null;
+  }
+
+  setFormatValue(name: string, value?: unknown) {
+    if (this.statics.allowDataAttrs.has(name)) {
+      const attrName = `data-${name}`;
+      if (value === undefined || value === null || value === false || value === '') {
+        this.domNode.removeAttribute(attrName);
+      }
+      else {
+        let stringValue: string;
+        if (typeof value === 'object') {
+          try {
+            stringValue = JSON.stringify(value);
+          }
+          catch {
+            stringValue = String(value);
+          }
+        }
+        else {
+          stringValue = String(value);
+        }
+        this.domNode.setAttribute(attrName, stringValue);
+      }
+      const handlerName = this.statics.allowDataAttrsChangeHandler[name];
+      if (handlerName && typeof (this as any)[handlerName] === 'function') {
+        (this as any)[handlerName](value);
+      }
+    }
   }
 
   colWidthFillTable() {
@@ -155,6 +264,84 @@ export class TableMainFormat extends ContainerFormat {
     );
   }
 
+  syncExtendsFromCols() {
+    // 从第一个 col 中读取 extends 对象（所有 col 应该有相同的 extends）
+    const cols = this.getCols();
+    if (cols.length === 0) return;
+    
+    const firstCol = cols[0];
+    const colValue = TableColFormat.value(firstCol.domNode);
+    const extendsObj = colValue.extends;
+    
+    if (extendsObj && typeof extendsObj === 'object') {
+      let needUpdate = false;
+      
+      // 检查 table 的 DOM 是否需要更新
+      for (const [key, val] of Object.entries(extendsObj)) {
+        const attrName = `data-${key}`;
+        const currentValue = this.domNode.getAttribute(attrName);
+        const expectedValue = val === undefined || val === null || val === '' 
+          ? null 
+          : (typeof val === 'object' ? JSON.stringify(val) : String(val));
+        
+        if (currentValue !== expectedValue) {
+          needUpdate = true;
+          break;
+        }
+      }
+      
+      // 只在需要更新时才修改 DOM，避免触发 optimize 循环
+      if (needUpdate) {
+        for (const [key, val] of Object.entries(extendsObj)) {
+          const attrName = `data-${key}`;
+          if (val === undefined || val === null || val === '') {
+            this.domNode.removeAttribute(attrName);
+          }
+          else {
+            const stringValue = typeof val === 'object' ? JSON.stringify(val) : String(val);
+            this.domNode.setAttribute(attrName, stringValue);
+          }
+        }
+      }
+      
+      // 同步到 wrapper 的 DOM
+      try {
+        const wrapper = this.parent;
+        if (wrapper && wrapper.statics.blotName === blotName.tableWrapper) {
+          let wrapperNeedUpdate = false;
+          for (const [key, val] of Object.entries(extendsObj)) {
+            const attrName = `data-${key}`;
+            const currentValue = wrapper.domNode.getAttribute(attrName);
+            const expectedValue = val === undefined || val === null || val === '' 
+              ? null 
+              : (typeof val === 'object' ? JSON.stringify(val) : String(val));
+            
+            if (currentValue !== expectedValue) {
+              wrapperNeedUpdate = true;
+              break;
+            }
+          }
+          
+          if (wrapperNeedUpdate) {
+            for (const [key, val] of Object.entries(extendsObj)) {
+              const attrName = `data-${key}`;
+              if (val === undefined || val === null || val === '') {
+                wrapper.domNode.removeAttribute(attrName);
+              }
+              else {
+                const stringValue = typeof val === 'object' ? JSON.stringify(val) : String(val);
+                wrapper.domNode.setAttribute(attrName, stringValue);
+              }
+            }
+          }
+        }
+      }
+      catch {
+        // wrapper 不存在时忽略
+      }
+    }
+  }
+
   optimize(context: Record<string, any>) {
     const parent = this.parent;
     if (parent !== null && parent.statics.blotName !== blotName.tableWrapper) {
@@ -163,6 +350,15 @@ export class TableMainFormat extends ContainerFormat {
 
     super.optimize(context);
     this.mergeRow();
+    // 延迟同步 extends 属性到 table 和 wrapper，避免在 optimize 过程中触发循环
+    setTimeout(() => {
+      try {
+        this.syncExtendsFromCols();
+      }
+      catch {
+        // 忽略错误
+      }
+    }, 0);
   }
 
   // ensure row id unique in same table
